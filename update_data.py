@@ -1,37 +1,27 @@
 """
-KRX 반도체 지수 + 비트코인 KRW 가격을 일별로 수집해 CSV로 저장.
+KODEX 반도체 ETF (091160) + 비트코인 KRW 가격을 일별로 수집해 CSV로 저장.
 2014-01-01 ~ 오늘.
+KODEX 반도체는 KRX 반도체 지수를 추종하는 ETF로, 사이클 추종에 사용 가능.
 """
 from datetime import datetime, timedelta
 import time
 import pandas as pd
 import requests
-from pykrx import stock
+import FinanceDataReader as fdr
 
-START_DATE = "20140101"
-TODAY = datetime.now().strftime("%Y%m%d")
+START_DATE = "2014-01-01"
+TODAY_DT = datetime.now().strftime("%Y-%m-%d")
 OUTPUT_CSV = "cycle_data.csv"
 
 
-def find_krx_semi_ticker():
-    """KRX 시리즈 중 '반도체'가 들어간 지수 코드를 동적으로 찾는다."""
-    tickers = stock.get_index_ticker_list(market="KRX")
-    for t in tickers:
-        name = stock.get_index_ticker_name(t)
-        if "반도체" in name:
-            print(f"[KRX] 발견: {t} = {name}")
-            return t, name
-    raise RuntimeError("KRX 반도체 지수를 찾지 못함")
-
-
-def fetch_krx_semi():
-    ticker, name = find_krx_semi_ticker()
-    print(f"[KRX] {START_DATE} ~ {TODAY} 데이터 수집 중... (1~2분 소요)")
-    df = stock.get_index_ohlcv(START_DATE, TODAY, ticker)
-    df = df[["종가"]].rename(columns={"종가": "krx_semi"})
+def fetch_kodex_semi():
+    """KODEX 반도체 ETF (091160) 일별 종가."""
+    print(f"[KODEX 091160] {START_DATE} ~ {TODAY_DT} 수집 중...")
+    df = fdr.DataReader("091160", START_DATE, TODAY_DT)
+    df = df[["Close"]].rename(columns={"Close": "krx_semi"})
     df.index = pd.to_datetime(df.index).date
     df.index.name = "date"
-    print(f"[KRX] {len(df)}일 데이터 수집 완료")
+    print(f"[KODEX 091160] {len(df)}일 수집 완료")
     return df
 
 
@@ -40,7 +30,7 @@ def fetch_btc_krw():
     print("[BTC] 업비트 일봉 수집 시작...")
     all_rows = []
     to_param = None
-    target_start = datetime.strptime(START_DATE, "%Y%m%d")
+    target_start = datetime.strptime(START_DATE, "%Y-%m-%d")
 
     while True:
         url = "https://api.upbit.com/v1/candles/days"
@@ -76,14 +66,14 @@ def fetch_btc_krw():
     df.columns = ["date", "btc_krw"]
     df["date"] = pd.to_datetime(df["date"]).dt.date
     df = df.set_index("date").sort_index()
-    df = df[df.index >= datetime.strptime(START_DATE, "%Y%m%d").date()]
+    df = df[df.index >= target_start.date()]
     df = df[~df.index.duplicated(keep="first")]
-    print(f"[BTC] {len(df)}일 데이터 수집 완료")
+    print(f"[BTC] {len(df)}일 수집 완료")
     return df
 
 
 def main():
-    krx = fetch_krx_semi()
+    krx = fetch_kodex_semi()
     btc = fetch_btc_krw()
 
     df = krx.join(btc, how="outer").sort_index()
@@ -95,7 +85,7 @@ def main():
     print(f"\n[완료] {OUTPUT_CSV} 저장")
     print(f"  기간: {df.index.min()} ~ {df.index.max()}")
     print(f"  행 수: {len(df)}")
-    print(f"  최신값: KRX={df['krx_semi'].iloc[-1]:,.2f}, "
+    print(f"  최신값: KODEX={df['krx_semi'].iloc[-1]:,.2f}, "
           f"BTC={df['btc_krw'].iloc[-1]:,.0f}원")
 
 
